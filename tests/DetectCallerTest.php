@@ -3,13 +3,13 @@
 namespace Horat1us\Tests;
 
 use Horat1us\DetectCaller;
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
+#[CoversClass(DetectCaller::class)]
 class DetectCallerTest extends TestCase
 {
-    /**
-     * @covers \Horat1us\DetectCaller::backtrace
-     */
     public function testBacktrace(): void
     {
         $line = __LINE__ + 1;
@@ -17,43 +17,48 @@ class DetectCallerTest extends TestCase
         $expected = [
             'file' => __FILE__,
             'line' => $line,
-            'function' => 'Horat1us\Tests\{closure}',
+            'function' => '{closure:' . __METHOD__ . '():' . $line . '}',
             'class' => __CLASS__,
             'type' => '->',
         ];
         $this->assertEquals($expected, $backtrace);
     }
 
-    public function callStaticDataProvider(): array
+    public static function callStaticDataProvider(): array
     {
         return [
             [__FUNCTION__, DetectCaller::function(),],
             [__CLASS__, DetectCaller::class(),],
             [DetectCaller::class(), (fn() => DetectCaller::class(1))(),],
             [(string)__LINE__, (fn() => DetectCaller::line())(),],
-            ['->', DetectCaller::type(),],
+            ['::', DetectCaller::type(),],
         ];
     }
 
     /**
-     * @dataProvider callStaticDataProvider
-     * @covers       \Horat1us\DetectCaller::__callStatic
      * @param int|string $expected
      * @param int|string $actual
      */
+    #[DataProvider('callStaticDataProvider')]
     public function testCallStatic($expected, $actual): void
     {
         $this->assertEquals($expected, $actual);
     }
 
-    /**
-     * @covers \Horat1us\DetectCaller::__callStatic
-     */
     public function testInvalidCallStatic(): void
     {
-        $this->expectException(\BadMethodCallException::class);
-        $this->expectExceptionMessage('Method caesar not exists!');
-        /** @noinspection PhpUndefinedMethodInspection */
-        DetectCaller::caesar(2);
+        // The undefined key raises a warning. PHPUnit 9 converted warnings to exceptions,
+        // like application error handlers usually do; PHPUnit 10+ does not.
+        set_error_handler(static function (int $severity, string $message, string $file, int $line): bool {
+            throw new \ErrorException($message, 0, $severity, $file, $line);
+        });
+        try {
+            $this->expectException(\BadMethodCallException::class);
+            $this->expectExceptionMessage('Method caesar not exists!');
+            /** @noinspection PhpUndefinedMethodInspection */
+            DetectCaller::caesar(2);
+        } finally {
+            restore_error_handler();
+        }
     }
 }
